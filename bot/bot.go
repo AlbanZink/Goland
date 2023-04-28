@@ -52,6 +52,10 @@ func Start() {
 			Name:        "saymyname",
 			Description: "Lire le data.json et lister le nom",
 		},
+		{
+			Name:        "hello",
+			Description: "Creates a message with a button",
+		},
 	})
 	if err != nil {
 		fmt.Println("Error registering slash commands:", err)
@@ -63,6 +67,8 @@ func Start() {
 	goBot.AddHandler(timeCommandhandler)
 	goBot.AddHandler(writeMyNameCommandHandler)
 	goBot.AddHandler(sayMyNameCommandHandler)
+	goBot.AddHandler(helloCommandHandler)
+	goBot.AddHandler(buttonClickHandler)
 
 	err = goBot.Open()
 	//Error handling
@@ -86,6 +92,10 @@ func messageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func timeCommandhandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Only process ApplicationCommand interactions
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return
+	}
 	data := i.ApplicationCommandData()
 	switch data.Name {
 	case "time":
@@ -98,8 +108,7 @@ func timeCommandhandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				// Replace EPOCH with the actual timestamp
 				Content: fmt.Sprintf("%s, the current time is: <t:%d>", nameUser, currentTimestamp),
 			},
-		},
-		)
+		})
 		if err != nil {
 			fmt.Println(err.Error())
 			return
@@ -108,6 +117,11 @@ func timeCommandhandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func writeMyNameCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Only process ApplicationCommand interactions
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return
+	}
+
 	data := i.ApplicationCommandData()
 	switch data.Name {
 	case "writemyname":
@@ -145,35 +159,92 @@ func writeMyNameCommandHandler(s *discordgo.Session, i *discordgo.InteractionCre
 }
 
 func sayMyNameCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	data := i.ApplicationCommandData()
-	switch data.Name {
-	case "saymyname":
-		file, err := os.Open("userName.json")
-		if err != nil {
-			fmt.Println("Error opening file:", err)
-			return
-		}
-		defer file.Close()
-		// Decode the JSON data
-		var users []User
-		err = json.NewDecoder(file).Decode(&users)
-		if err != nil {
-			fmt.Println("Error decoding JSON:", err)
-			return
-		}
-		// Print the users
-		for _, user := range users {
-			userName := user.Name
-			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: userName,
-				},
-			})
+	if i.Type == discordgo.InteractionApplicationCommand {
+		data := i.ApplicationCommandData()
+		switch data.Name {
+		case "saymyname":
+			file, err := os.Open("userName.json")
 			if err != nil {
-				fmt.Println("Error sending response:", err)
+				fmt.Println("Error opening file:", err)
 				return
 			}
+			defer file.Close()
+			// Decode the JSON data
+			var users []User
+			err = json.NewDecoder(file).Decode(&users)
+			if err != nil {
+				fmt.Println("Error decoding JSON:", err)
+				return
+			}
+			// Print the users
+			for _, user := range users {
+				userName := user.Name
+				err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: userName,
+					},
+				})
+				if err != nil {
+					fmt.Println("Error sending response:", err)
+					return
+				}
+			}
+		}
+	}
+}
+
+func helloCommandHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if i.Type == discordgo.InteractionApplicationCommand {
+		data := i.ApplicationCommandData()
+		switch data.Name {
+		case "hello":
+			// Create a new button component
+			button := &discordgo.Button{
+				Label:    "Click me!",
+				Style:    discordgo.PrimaryButton,
+				CustomID: "hello_button",
+			}
+			buttonRow := &discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{button},
+			}
+			// Create the interaction response with the button component
+			response := &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Please click the button!",
+					Components: []discordgo.MessageComponent{
+						buttonRow,
+					},
+				},
+			}
+			// Respond to the interaction with the message containing the button
+			err := s.InteractionRespond(i.Interaction, response)
+			if err != nil {
+				fmt.Println("Error responding to interaction:", err)
+				return
+			}
+		}
+	}
+}
+
+func buttonClickHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Only process MessageComponent interactions
+	if i.Type != discordgo.InteractionMessageComponent {
+		return
+	}
+	// Check if the clicked button has the custom ID "hello_button"
+	if i.MessageComponentData().CustomID == "hello_button" {
+		// Respond to the button click with "Hello World!"
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Hello World!",
+			},
+		})
+		if err != nil {
+			fmt.Println("Error responding to button click:", err)
+			return
 		}
 	}
 }
